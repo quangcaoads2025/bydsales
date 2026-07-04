@@ -1,5 +1,6 @@
 /***************************************************************
  * BYD CRM - Apps Script API đúng theo file Excel của bạn
+ * Bản v8: Fix lưu giờ ghi nhận + giữ số 0 đầu SĐT
  * File dữ liệu chính:
  *  - 00_Users: tài khoản đăng nhập / phân quyền
  *  - 03_Data_Theo_Doi: data khách hàng BYD
@@ -154,12 +155,11 @@ function setupOnce() {
   }
 
   // Kiểm tra 2 sheet bắt buộc của file CRM
-  sheet_(CONFIG.LEADS_SHEET);
+  ensureLeadSheetFormat_(sheet_(CONFIG.LEADS_SHEET));
   sheet_(CONFIG.META_SHEET);
-  ensureLeadTimeColumn_();
 
   formatSystemSheets_();
-  return 'Đã khởi tạo BYD CRM. Tài khoản mặc định: admin / 123456';
+  return 'Đã khởi tạo BYD CRM. Đã kiểm tra cột Giờ ghi nhận và định dạng SĐT dạng Text.';
 }
 
 function formatSystemSheets_() {
@@ -360,7 +360,7 @@ function filterLeadsByRole_(user, leads) {
 
 function getLeads_() {
   const sh = sheet_(CONFIG.LEADS_SHEET);
-  ensureLeadTimeColumn_();
+  ensureLeadSheetFormat_(sh);
   const last = sh.getLastRow();
   if (last < CONFIG.LEAD_START_ROW) return [];
 
@@ -376,7 +376,6 @@ function mapLeadRow_(r, rowNumber) {
     id: 'R' + rowNumber,
     stt: r[LEAD_COL.stt - 1],
     createdDate: dateOut_(r[LEAD_COL.createdDate - 1]),
-    createdTime: timeOut_(r[LEAD_COL.createdTime - 1]),
     department: String(r[LEAD_COL.department - 1] || '').trim(),
     saleName: String(r[LEAD_COL.saleName - 1] || '').trim(),
     customerName: String(r[LEAD_COL.customerName - 1] || '').trim(),
@@ -399,6 +398,7 @@ function mapLeadRow_(r, rowNumber) {
     userId: String(r[LEAD_COL.userId - 1] || '').trim(),
     createdBy: String(r[LEAD_COL.createdBy - 1] || '').trim(),
     updatedBy: String(r[LEAD_COL.updatedBy - 1] || '').trim(),
+    createdTime: timeOut_(r[LEAD_COL.createdTime - 1]),
   };
 }
 
@@ -410,7 +410,7 @@ function saveLead_(user, lead) {
 
   try {
     const sh = sheet_(CONFIG.LEADS_SHEET);
-    ensureLeadTimeColumn_();
+    ensureLeadSheetFormat_(sh);
     const before = lead.id ? getLeadById_(lead.id) : null;
     if (before && !canEditLead_(user, before)) throw new Error('Bạn không có quyền sửa khách này');
 
@@ -422,7 +422,10 @@ function saveLead_(user, lead) {
     const createdDate = parseDate_(lead.createdDate || (before && before.createdDate) || new Date());
     const nextDate = parseDate_(lead.nextDate || '');
     const phone = phoneClean_(lead.phone || (before && before.phone) || '');
-    const createdTime = timeClean_(lead.createdTime || (before && before.createdTime) || (isNew ? Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm:ss') : ''));
+    let createdTime = normalizeTime_(lead.createdTime || lead.time || lead.gio || lead.gioPhatSinh || lead.recordedTime || (before && before.createdTime) || '');
+    if (isNew && !createdTime) {
+      createdTime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm:ss');
+    }
 
     const rowData = [[
       row - CONFIG.LEAD_START_ROW,
@@ -452,13 +455,20 @@ function saveLead_(user, lead) {
       createdTime,
     ]];
 
-    sh.getRange(row, 1, 1, CONFIG.LEAD_COL_COUNT).setValues(rowData);
-    sh.getRange(row, LEAD_COL.createdDate).setNumberFormat('dd/mm/yyyy');
-    sh.getRange(row, LEAD_COL.nextDate).setNumberFormat('dd/mm/yyyy');
+    // BẮT BUỘC đặt cột SĐT và cột giờ về dạng text trước/sau khi ghi,
+    // nếu không Google Sheets có thể tự xóa số 0 đầu hoặc hiểu giờ sai định dạng.
+    sh.getRange(row, LEAD_COL.phone).setNumberFormat('@');
     sh.getRange(row, LEAD_COL.createdTime).setNumberFormat('@');
 
+    sh.getRange(row, 1, 1, CONFIG.LEAD_COL_COUNT).setValues(rowData);
+
+    sh.getRange(row, LEAD_COL.createdDate).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(row, LEAD_COL.nextDate).setNumberFormat('dd/mm/yyyy');
+    sh.getRange(row, LEAD_COL.phone).setNumberFormat('@').setValue(String(phone || ''));
+    sh.getRange(row, LEAD_COL.createdTime).setNumberFormat('@').setValue(String(createdTime || ''));
+
     log_(user, isNew ? 'createLead' : 'updateLead', 'R' + row, before, lead);
-    return { ok: true, id: 'R' + row };
+    return { ok: true, id: 'R' + row, createdTime: createdTime };
   } finally {
     lock.releaseLock();
   }
@@ -518,6 +528,7 @@ function getLeadById_(id) {
   const row = getRowFromId_(id);
   if (!row) return null;
   const sh = sheet_(CONFIG.LEADS_SHEET);
+  ensureLeadTimeColumn_(sh);
   if (row < CONFIG.LEAD_START_ROW || row > sh.getLastRow()) return null;
   const r = sh.getRange(row, 1, 1, CONFIG.LEAD_COL_COUNT).getValues()[0];
   return mapLeadRow_(r, row);
@@ -560,24 +571,6 @@ function getMeta_() {
 }
 
 /*********************** HELPERS ******************************/
-
-function ensureLeadTimeColumn_() {
-  const sh = sheet_(CONFIG.LEADS_SHEET);
-  if (sh.getMaxColumns() < CONFIG.LEAD_COL_COUNT) {
-    sh.insertColumnsAfter(sh.getMaxColumns(), CONFIG.LEAD_COL_COUNT - sh.getMaxColumns());
-  }
-
-  const headerCell = sh.getRange(CONFIG.LEAD_HEADER_ROW, LEAD_COL.createdTime);
-  const currentHeader = String(headerCell.getValue() || '').trim();
-  if (!currentHeader) {
-    headerCell.setValue('Giờ ghi nhận');
-  }
-
-  headerCell
-    .setBackground('#0b6b63')
-    .setFontColor('#ffffff')
-    .setFontWeight('bold');
-}
 
 function ss_() {
   return SpreadsheetApp.getActiveSpreadsheet();
@@ -652,6 +645,14 @@ function unique_(arr) {
 function phoneClean_(v) {
   let p = String(v || '').trim();
   p = p.replace(/[^0-9]/g, '');
+
+  // Google Sheets có thể làm mất số 0 đầu khi ô SĐT bị định dạng Number.
+  // Với số điện thoại Việt Nam bị còn 9 số, tự bù lại số 0 ở đầu.
+  if (/^\d{9}$/.test(p)) p = '0' + p;
+
+  // Nếu nhập dạng 84xxxxxxxxx thì đổi về 0xxxxxxxxx.
+  if (/^84\d{9}$/.test(p)) p = '0' + p.slice(2);
+
   return p;
 }
 
@@ -661,7 +662,8 @@ function phoneOut_(v) {
 }
 
 function phoneCheck_(p) {
-  return /^0\d{9}$/.test(String(p || '')) ? 'Đúng' : 'Sai';
+  const phone = phoneClean_(p);
+  return /^0\d{9}$/.test(phone) ? 'Đúng' : 'Sai';
 }
 
 function duplicateCheck_(phone, currentRow) {
@@ -688,9 +690,80 @@ function qualityScore_(lead, phone) {
   return s;
 }
 
+
+
+function ensureLeadSheetFormat_(sh) {
+  if (!sh) return;
+  ensureLeadTimeColumn_(sh);
+
+  const rows = Math.max(1, sh.getMaxRows() - CONFIG.LEAD_START_ROW + 1);
+  sh.getRange(CONFIG.LEAD_START_ROW, LEAD_COL.phone, rows, 1).setNumberFormat('@');
+  sh.getRange(CONFIG.LEAD_START_ROW, LEAD_COL.createdTime, rows, 1).setNumberFormat('@');
+}
+
+// Chạy hàm này 1 lần nếu các số cũ trong sheet đang bị mất số 0 đầu.
+// Hàm sẽ sửa các SĐT 9 số thành 10 số bằng cách thêm 0 ở đầu và định dạng cột SĐT là Text.
+function fixPhoneAndTimeOnce() {
+  const sh = sheet_(CONFIG.LEADS_SHEET);
+  ensureLeadSheetFormat_(sh);
+
+  const last = sh.getLastRow();
+  if (last < CONFIG.LEAD_START_ROW) return 'Chưa có dữ liệu khách hàng để xử lý';
+
+  const numRows = last - CONFIG.LEAD_START_ROW + 1;
+  const phoneRange = sh.getRange(CONFIG.LEAD_START_ROW, LEAD_COL.phone, numRows, 1);
+  const values = phoneRange.getValues();
+  const fixed = values.map(row => [phoneClean_(row[0])]);
+
+  phoneRange.setNumberFormat('@');
+  phoneRange.setValues(fixed);
+  phoneRange.setNumberFormat('@');
+
+  sh.getRange(CONFIG.LEAD_START_ROW, LEAD_COL.createdTime, numRows, 1).setNumberFormat('@');
+
+  return 'Đã định dạng lại cột SĐT dạng Text, tự bù số 0 cho SĐT 9 số và kiểm tra cột Giờ ghi nhận.';
+}
+
+function ensureLeadTimeColumn_(sh) {
+  if (!sh) return;
+  if (sh.getMaxColumns() < LEAD_COL.createdTime) {
+    sh.insertColumnsAfter(sh.getMaxColumns(), LEAD_COL.createdTime - sh.getMaxColumns());
+  }
+  const header = sh.getRange(CONFIG.LEAD_HEADER_ROW, LEAD_COL.createdTime);
+  if (!String(header.getValue() || '').trim()) {
+    header.setValue('Giờ ghi nhận');
+    header.setBackground('#0b6b63').setFontColor('#ffffff').setFontWeight('bold');
+  }
+  const rows = Math.max(1, sh.getMaxRows() - CONFIG.LEAD_START_ROW + 1);
+  sh.getRange(CONFIG.LEAD_START_ROW, LEAD_COL.createdTime, rows, 1).setNumberFormat('@');
+}
+
+function normalizeTime_(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'HH:mm:ss');
+  }
+  const s = String(v || '').trim();
+  const m = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return '';
+  const hh = ('0' + Math.min(23, Number(m[1]))).slice(-2);
+  const mm = ('0' + Math.min(59, Number(m[2]))).slice(-2);
+  const ss = ('0' + Math.min(59, Number(m[3] || 0))).slice(-2);
+  return hh + ':' + mm + ':' + ss;
+}
+
+function timeOut_(v) {
+  return normalizeTime_(v);
+}
+
 function parseDate_(v) {
   if (!v) return '';
   if (Object.prototype.toString.call(v) === '[object Date]') return v;
+  const s = String(v || '').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
   const d = new Date(v);
   return isNaN(d.getTime()) ? v : d;
 }
@@ -701,24 +774,6 @@ function dateOut_(v) {
     return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   }
   return String(v);
-}
-
-
-function timeClean_(v) {
-  if (!v) return '';
-  if (Object.prototype.toString.call(v) === '[object Date]') {
-    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'HH:mm:ss');
-  }
-
-  const s = String(v).trim();
-  const m = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (!m) return s;
-
-  return String(m[1]).padStart(2, '0') + ':' + m[2] + ':' + (m[3] || '00');
-}
-
-function timeOut_(v) {
-  return timeClean_(v);
 }
 
 function weekNum_(d) {
