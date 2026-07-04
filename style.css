@@ -369,3 +369,6 @@ td b{font-weight:700}.badge{display:inline-flex;align-items:center;border-radius
 .auto-time b{background:#e8f7f5;border-radius:999px;padding:3px 9px}
 .brand-logo{image-rendering:auto}
 @media(max-width:720px){.hero-brand-box{width:240px}.hero-slogan{font-size:12px}}
+
+.field-note{display:block;margin-top:6px;color:#98a2b3;font-size:12px;line-height:1.35}
+.phone-cell{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600;color:#152238}
