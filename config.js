@@ -1,7 +1,7 @@
 // Dán URL Web App Google Apps Script của bạn vào đây sau khi deploy.
 // Ví dụ: https://script.google.com/macros/s/AKfycb.../exec
 window.BYD_CRM_CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxCgXtkcq2B0M9Rn-1bTKeQrLt7Wd7YdehsE0yxWvOKIADcOQ8eguffmOug6t2NxK7t/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbxMiLwCLlAeuyeHUWNx8W3qM_D0FUx11sGwNaQIg7HIxMzDnm9vcpHzZsa16Dk-aSI3/exec",
   APP_NAME: "BYD CRM",
   BRAND_NAME: "Ngọc Anh BYD",
   VERSION: "1.0.7",
