@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BYD CRM Sale</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <dialog id="leadDialog" class="modal">
+    <form id="leadForm" method="dialog" class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2 id="leadDialogTitle">Thêm khách BYD</h2>
+          <p>Sale chỉ sửa được khách thuộc tài khoản của mình. Admin sửa toàn bộ.</p>
+        </div>
+        <button type="button" class="icon-btn" data-close-dialog>×</button>
+      </div>
+      <div class="form-grid">
+        <label>Ngày phát sinh<input name="date" type="date" required /></label>
+        <label class="admin-field">Phòng bán hàng<select name="department"></select></label>
+        <label class="admin-field">Sale phụ trách<select name="saleLogin"></select></label>
+        <label>Tên khách hàng<input name="customer" type="text" placeholder="VD: Anh Minh" required /></label>
+        <label>Số điện thoại<input name="phone" type="tel" placeholder="0912345678" required /></label>
+        <label>Khu vực<select name="area"></select></label>
+        <label>Dòng xe BYD<select name="model"></select></label>
+        <label>Nguồn/Kênh<select name="source"></select></label>
+        <label>Mức độ quan tâm<select name="interest"></select></label>
+        <label>Trạng thái khách<select name="status"></select></label>
+        <label>Hình thức chăm sóc<select name="care"></select></label>
+        <label>Ngày hẹn tiếp theo<input name="nextDate" type="date" /></label>
+        <label class="full">Ghi chú chăm sóc<textarea name="note" rows="3" placeholder="Nội dung tư vấn, nhu cầu, ngân sách, xe đang cân nhắc..."></textarea></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="ghost" data-close-dialog>Hủy</button>
+        <button type="submit" class="primary">Lưu dữ liệu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="userDialog" class="modal">
+    <form id="userForm" method="dialog" class="modal-card small">
+      <div class="modal-head">
+        <div>
+          <h2>Tạo/Sửa tài khoản</h2>
+          <p>Mật khẩu nhập mới sẽ được mã hóa trong Google Sheets.</p>
+        </div>
+        <button type="button" class="icon-btn" data-close-dialog>×</button>
+      </div>
+      <div class="form-grid one">
+        <label>Login<input name="Login" type="text" placeholder="pbh01_sale01" required /></label>
+        <label>Mật khẩu mới<input name="Password" type="password" placeholder="Bỏ trống nếu không đổi" /></label>
+        <label>Họ tên<input name="HoTen" type="text" required /></label>
+        <label>Vai trò<select name="VaiTro"><option>Sale</option><option>Manager</option><option>Admin</option><option>Viewer</option></select></label>
+        <label>Phòng<select name="Phong"></select></label>
+        <label>Tên Sale hiển thị<input name="SaleName" type="text" /></label>
+        <label>Trạng thái<select name="TrangThai"><option>Active</option><option>Inactive</option></select></label>
+        <label>Ghi chú<textarea name="GhiChu" rows="2"></textarea></label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="ghost" data-close-dialog>Hủy</button>
+        <button type="submit" class="primary">Lưu tài khoản</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
