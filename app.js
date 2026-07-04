@@ -59,6 +59,14 @@ function leadDateCell(r){
   const t = leadTime(r);
   return `<div class="date-cell"><b>${esc(d || "-")}</b>${t ? `<span>${esc(t)}</span>` : ""}</div>`;
 }
+
+function phoneDisplay(v){
+  let p = String(v ?? "").replace(/[^0-9]/g, "");
+  if(/^\d{9}$/.test(p)) p = "0" + p;
+  if(/^84\d{9}$/.test(p)) p = "0" + p.slice(2);
+  return p;
+}
+
 const isAdmin = () => state.session?.user?.role === "admin";
 const isManager = () => state.session?.user?.role === "manager";
 const canManageUsers = () => isAdmin();
@@ -183,7 +191,7 @@ function filtersHtml(){
 function select(id, arr, label, val){ return `<select id="${id}"><option value="">${label}</option>${arr.map(x=>`<option ${x===val?"selected":""}>${esc(x)}</option>`).join("")}</select>`; }
 function leadTable(rows, compact=false){
   if(!rows.length) return `<div class="empty">Chưa có dữ liệu phù hợp</div>`;
-  return `<div class="table-wrap"><table><thead><tr><th>Ngày / Giờ</th><th>Khách hàng</th><th>SĐT</th><th>Dòng xe</th><th>Nguồn</th><th>Mức độ</th><th>Trạng thái</th><th>Sale</th><th>Hẹn tiếp theo</th><th>Ghi chú</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${leadDateCell(r)}</td><td><b>${esc(r.customerName)}</b><br><span class="hint">${esc(r.area||"")}</span></td><td>${esc(r.phone)}</td><td>${badge(r.model,"brand")}</td><td>${esc(r.source)}</td><td>${badge(r.interest)}</td><td>${badge(r.status)}</td><td>${esc(r.saleName)}<br><span class="hint">${esc(r.department)}</span></td><td>${fmt(r.nextDate)}</td><td>${esc(r.note||"")}</td><td><div class="row-actions"><button class="iconbtn editLead" data-id="${esc(r.id)}">✎</button>${isAdmin()?`<button class="iconbtn deleteLead" data-id="${esc(r.id)}">×</button>`:""}</div></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Ngày / Giờ</th><th>Khách hàng</th><th>SĐT</th><th>Dòng xe</th><th>Nguồn</th><th>Mức độ</th><th>Trạng thái</th><th>Sale</th><th>Hẹn tiếp theo</th><th>Ghi chú</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${leadDateCell(r)}</td><td><b>${esc(r.customerName)}</b><br><span class="hint">${esc(r.area||"")}</span></td><td class="phone-cell">${esc(phoneDisplay(r.phone))}</td><td>${badge(r.model,"brand")}</td><td>${esc(r.source)}</td><td>${badge(r.interest)}</td><td>${badge(r.status)}</td><td>${esc(r.saleName)}<br><span class="hint">${esc(r.department)}</span></td><td>${fmt(r.nextDate)}</td><td>${esc(r.note||"")}</td><td><div class="row-actions"><button class="iconbtn editLead" data-id="${esc(r.id)}">✎</button>${isAdmin()?`<button class="iconbtn deleteLead" data-id="${esc(r.id)}">×</button>`:""}</div></td></tr>`).join("")}</tbody></table></div>`;
 }
 function calendarPage(){
   const rows=state.leads.filter(x=>x.nextDate).sort((a,b)=>String(a.nextDate).localeCompare(String(b.nextDate)));
@@ -209,7 +217,7 @@ function leadModal(lead){
   <input type="hidden" name="id" value="${esc(current.id||"")}" />
   ${dateTimeField("Ngày phát sinh","createdDate",fmt(current.createdDate)||today(),current.createdTime||leadTime(current),isNew)}
   ${field("Tên khách hàng","customerName","text",current.customerName||"",true)}
-  ${field("Số điện thoại","phone","text",current.phone||"",true)}
+  ${phoneField("Số điện thoại","phone",phoneDisplay(current.phone||""),true)}
   ${selectField("Khu vực","area",meta.areas||[],current.area)}
   ${selectField("Dòng xe BYD","model",meta.models||[],current.model)}
   ${selectField("Nguồn/Kênh","source",meta.sources||[],current.source)}
@@ -223,6 +231,7 @@ function leadModal(lead){
   </div><div class="actions" style="justify-content:flex-end;margin-top:10px"><button type="button" class="btn btn-light closeModal">Hủy</button><button class="btn btn-primary">Lưu dữ liệu</button></div></div></form></div>`;
 }
 function field(label,name,type,value,required=false){return `<div class="field"><label>${label}</label><input name="${name}" type="${type}" value="${esc(value)}" ${required?"required":""}/></div>`}
+function phoneField(label,name,value,required=false){return `<div class="field"><label>${label}</label><input name="${name}" type="tel" inputmode="numeric" pattern="0[0-9]{9}" maxlength="10" placeholder="0912345678" value="${esc(value)}" ${required?"required":""}/><small class="field-note">Nhập đủ 10 số, bắt đầu bằng số 0.</small></div>`}
 function dateTimeField(label,name,dateValue,timeValue,isNew=false){
   const t = timeValue || (isNew ? nowTime() : "");
   const d = dateValue || today();
@@ -272,6 +281,7 @@ function bindEvents(){
     e.preventDefault();
     syncLeadAutoTime(e.target);
     const o=Object.fromEntries(new FormData(e.target).entries());
+    o.phone = phoneDisplay(o.phone);
     // Gửi thêm nhiều tên trường tương đương để Apps Script/Google Sheet dễ nhận và trả về giờ.
     o.time = o.createdTime;
     o.gio = o.createdTime;
@@ -294,7 +304,7 @@ async function loadAll(){
 }
 function exportCsv(){
   const rows=visibleLeads(); const head=["Ngày","Giờ","Phòng","Sale","Tên khách","SĐT","Khu vực","Dòng xe","Nguồn","Mức độ","Trạng thái","Ngày hẹn","Ghi chú"];
-  const body=rows.map(r=>[fmt(r.createdDate || r.createdDateTime || r.createdAt),leadTime(r),r.department,r.saleName,r.customerName,r.phone,r.area,r.model,r.source,r.interest,r.status,fmt(r.nextDate),r.note]);
+  const body=rows.map(r=>[fmt(r.createdDate || r.createdDateTime || r.createdAt),leadTime(r),r.department,r.saleName,r.customerName,phoneDisplay(r.phone),r.area,r.model,r.source,r.interest,r.status,fmt(r.nextDate),r.note]);
   const csv=[head,...body].map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"})); a.download="byd-crm-export.csv"; a.click();
 }
